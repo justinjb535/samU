@@ -1,74 +1,89 @@
-// 1. POLYFILL FIRST
-global.DOMMatrix = class DOMMatrix {
-  constructor(a=1,b=0,c=0,d=1,e=0,f=0) { Object.assign(this,{a,b,c,d,e,f}) }
-  multiply() { return this } flipX() { return this } flipY() { return this }
-  translate() { return this } scale() { return this } rotate() { return this } inverse() { return this }
-};
-global.DOMMatrixReadOnly = global.DOMMatrix;
-global.Path2D = class Path2D {};
-
 import express from 'express';
 import fs from 'fs';
 import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import cors from 'cors';
+import pdfParse from 'pdf-parse';
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs'; // for page text + count
+//import 'dotenv/config';
+//import { signupRouter } from "alveoli";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const app = express();
-app.use(express.static('public'));
-app.use(express.json());
 const upload = multer({ dest: 'uploads/' });
 
-let pdfPages = [];
-let pdfjsLib;
+app.use(cors());
+app.use(express.json());
+app.use(express.static('public'));
+app.use('/uploads', express.static('uploads'));
+app.use('/api/auth', signupRouter);
 
-async function initPdfjs() {
-  pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
-}
-await initPdfjs();
+let pdfText = "";  // full text for TTS
+let pdfDoc = null; // pdfjs doc for paging
 
-const CMAP_URL = path.join(__dirname, 'node_modules/pdfjs-dist/cmaps/');
-const FONT_URL = path.join(__dirname, 'node_modules/pdfjs-dist/standard_fonts/');
-
-async function loadPDF(filePath) {
-  pdfPages = [];
-  const data = new Uint8Array(fs.readFileSync(filePath));
-  const pdf = await pdfjsLib.getDocument({
-    data,
-    disableWorker: true,
-    cMapUrl: CMAP_URL,
-    cMapPacked: true,
-    standardFontDataUrl: FONT_URL
-  }).promise;
-
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    pdfPages.push(content.items.map(item => item.str).join(" "));
-  }
-}
-
+// 1. Upload: extract full text + load pdf for paging
 app.post('/upload', upload.single('pdf'), async (req, res) => {
   try {
-    await loadPDF(req.file.path);
-    fs.unlinkSync(req.file.path);
-    res.json({ pages: pdfPages.length });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
+    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+
+    const filePath = path.join(__dirname, req.file.path);
+    const dataBuffer = fs.readFileSync(filePath);
+
+    // Get full text for TTS
+    const data = await pdfParse(dataBuffer);
+    pdfText = data.text;
+
+    // Load pdfjs doc to get page count
+    const dataPdf = new Uint8Array(dataBuffer);
+    pdfDoc = await pdfjsLib.getDocument({ data: dataPdf }).promise;
+
+    res.json({ 
+      pages: pdfDoc.numPages,
+      message: "PDF loaded" 
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to process PDF" });
   }
 });
 
-app.get('/page/:num', (req, res) => {
-  const num = parseInt(req.params.num);
-  if (pdfPages.length === 0) return res.status(400).json({ error: 'No PDF loaded' });
-  if (num >= 0 && num < pdfPages.length) {
-    res.json({ text: pdfPages[num], page: num + 1, total: pdfPages.length });
-  } else {
-    res.status(404).json({ error: 'Page not found' });
+// 2. Get text for specific page - 0 based from frontend
+app.get('/page/:num', async (req, res) => {
+  try {
+    if (!pdfDoc) return res.status(400).json({ error: "Upload a PDF first" });
+    
+    const pageIndex = parseInt(req.params.num); // 0-based
+    const pageNum = pageIndex + 1; // pdfjs is 1-based
+
+    if (pageNum < 1 || pageNum > pdfDoc.numPages) {
+      return res.status(400).json({ error: "Invalid page number" });
+    }
+
+    const page = await pdfDoc.getPage(pageNum);
+    const content = await page.getTextContent();
+    const text = content.items.map(item => item.str).join(' ');
+    
+    res.json({ 
+      text: text,
+      page: pageNum,
+      total: pdfDoc.numPages
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to get page" });
   }
 });
 
-// REMOVED /speak and /stop endpoints
+// 3. TTS endpoint - sends full pdf text
+app.get('/speak', (req, res) => {
+  if (!pdfText) return res.status(400).json({ error: "Upload a PDF first" });
+  res.json({ text: pdfText });
+});
 
-const port = process.env.PORT || 8080;
-app.listen(port, '0.0.0.0', () => console.log(`Reader at ${port}`));
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`v2.0.0 running on ${PORT}`));

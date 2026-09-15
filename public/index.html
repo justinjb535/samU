@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>📖 PDF Voice Reader</title>
+<title>📖 PDF Voice Reader v2.0</title>
 <style>
   :root {
     --bg: #ffffff; --text: #1a1a1a; --card: #f7f7f7; --border: #dcdcdc;
@@ -34,7 +34,8 @@
   #text {
     font-size: 16px; line-height: 1.7; white-space: pre-wrap;
     margin: 0 20px 100px; min-height: 40vh; background: var(--card);
-    padding: 16px; border-radius: 12px; border: 1px solid var(--border);
+    padding: 16px; padding-bottom: 120px; /* FIX: extra space for nav */
+    border-radius: 12px; border: 1px solid var(--border);
     overflow-y: auto;
   }
   button {
@@ -54,12 +55,12 @@
   #speed { accent-color: var(--accent); }
  .toggle { background: var(--card); border: 1px solid var(--border); border-radius: 50px; padding: 8px 12px; font-size: 1.2rem; }
   @media (min-width: 640px) {
-    #text { margin: 0 40px 100px; padding: 20px; font-size: 17px; }
+    #text { margin: 0 40px 100px; padding: 20px; padding-bottom: 120px; font-size: 17px; }
     #dropzone { margin: 20px 40px; }
     h1 { font-size: 1.5rem; }
   }
   @media (min-width: 1024px) {
-    #text { margin: 0 auto 100px; max-width: 900px; padding: 24px; font-size: 18px; }
+    #text { margin: 0 auto 100px; max-width: 900px; padding: 24px; padding-bottom: 120px; font-size: 18px; }
     #dropzone { margin: 20px auto; max-width: 900px; }
     header { padding: 16px 5%; }
   }
@@ -67,7 +68,7 @@
 </head>
 <body>
   <header>
-    <h1>📖 PDF Voice Reader</h1>
+    <h1>📖 PDF Voice Reader v2.0</h1>
     <button class="toggle" id="themeToggle">🌙</button>
   </header>
 
@@ -107,7 +108,6 @@
   let totalPages = 0;
   let currentText = '';
   let utterance = null;
-
   const info = document.getElementById('info');
   const textDiv = document.getElementById('text');
   const fileInput = document.getElementById('fileInput');
@@ -140,6 +140,9 @@
     info.textContent = `Page ${data.page} of ${data.total}`;
     currentPage = num;
     updateBtns();
+    
+    // FIX: Auto scroll to bottom when text loads
+    textDiv.scrollTop = textDiv.scrollHeight;
   }
 
   function prevPage() { if (currentPage > 0) loadPage(currentPage - 1); }
@@ -160,12 +163,12 @@
   function speak() {
     stopTTS();
     const speed = parseFloat(document.getElementById('speed').value);
-    utterance = new SpeechSynthesisUtterance(currentText.slice(0, 4000)); // limit
+    utterance = new SpeechSynthesisUtterance(currentText.slice(0, 4000));
     utterance.rate = speed;
     utterance.lang = 'en-US';
     speechSynthesis.speak(utterance);
   }
-
+  
   function stopTTS() {
     speechSynthesis.cancel();
   }
