@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>📖 PDF Voice Reader</title>
+<style>
+  :root {
+    --bg: #ffffff; --text: #1a1a1a; --card: #f7f7f7; --border: #dcdcdc;
+    --accent: #4CAF50; --accent-hover: #43a047;
+  }
+  [data-theme="dark"] {
+    --bg: #0a0a0a; --text: #eeeeee; --card: #1a1a1a; --border: #333;
+    --accent: #4CAF50; --accent-hover: #66bb6a;
+  }
+    * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg); color: var(--text); margin: 0; padding: 0;
+    transition: background 0.3s ease, color 0.3s ease;
+    min-height: 100vh; display: flex; flex-direction: column;
+  }
+  header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+    background: var(--bg); position: sticky; top: 0; z-index: 10;
+  }
+  h1 { font-size: 1.2rem; margin: 0; }
+  #dropzone {
+    border: 2px dashed var(--border); padding: 30px 20px; text-align: center;
+    border-radius: 16px; margin: 20px; background: var(--card);
+  }
+  #info { text-align: center; opacity: 0.7; margin: 10px 20px; font-size: 0.9rem; }
+  #text {
+    font-size: 16px; line-height: 1.7; white-space: pre-wrap;
+    margin: 0 20px 100px; min-height: 40vh; background: var(--card);
+    padding: 16px; border-radius: 12px; border: 1px solid var(--border);
+    overflow-y: auto;
+  }
+  button {
+    font-size: 16px; padding: 12px 16px; margin: 4px; border: none;
+    border-radius: 12px; background: var(--accent); color: white;
+    cursor: pointer; transition: transform 0.1s ease, background 0.2s ease;
+  }
+  button:active { transform: scale(0.95); }
+  button:hover { background: var(--accent-hover); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  #controls {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: var(--bg); padding: 12px 20px; border-top: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
+    gap: 8px; backdrop-filter: blur(10px);
+  }
+  #speed { accent-color: var(--accent); }
+ .toggle { background: var(--card); border: 1px solid var(--border); border-radius: 50px; padding: 8px 12px; font-size: 1.2rem; }
+  @media (min-width: 640px) {
+    #text { margin: 0 40px 100px; padding: 20px; font-size: 17px; }
+    #dropzone { margin: 20px 40px; }
+    h1 { font-size: 1.5rem; }
+  }
+  @media (min-width: 1024px) {
+    #text { margin: 0 auto 100px; max-width: 900px; padding: 24px; font-size: 18px; }
+    #dropzone { margin: 20px auto; max-width: 900px; }
+    header { padding: 16px 5%; }
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>📖 PDF Voice Reader</h1>
+    <button class="toggle" id="themeToggle">🌙</button>
+  </header>
+
+  <div id="dropzone">
+    <b>Drop PDF here or</b><br>
+    <input type="file" id="fileInput" accept=".pdf" style="margin-top:10px;">
+  </div>
+
+  <div id="info">No PDF loaded</div>
+  <div id="text"></div>
+
+  <div id="controls">
+    <button id="prevBtn" onclick="prevPage()" disabled>⏮️ Prev</button>
+    <button id="playBtn" onclick="speak()" disabled>▶️ Play</button>
+    <button id="stopBtn" onclick="stopTTS()">⏹️ Stop</button>
+    <button id="nextBtn" onclick="nextPage()" disabled>⏭️ Next</button>
+    <label>Speed: <input type="range" id="speed" min="0.5" max="2" step="0.1" value="1"></label>
+  </div>
+
+<script>
+  // THEME TOGGLE
+  const toggle = document.getElementById('themeToggle');
+  const html = document.documentElement;
+  const savedTheme = localStorage.getItem('theme') || 'light';
+  html.setAttribute('data-theme', savedTheme);
+  toggle.textContent = savedTheme === 'dark'? '☀️' : '🌙';
+  toggle.addEventListener('click', () => {
+    const current = html.getAttribute('data-theme');
+    const newTheme = current === 'dark'? 'light' : 'dark';
+    html.setAttribute('data-theme', newTheme);
+    localStorage.setItem('theme', newTheme);
+    toggle.textContent = newTheme === 'dark'? '☀️' : '🌙';
+  });
+
+  // APP STATE
+  let currentPage = 0;
+  let totalPages = 0;
+  let currentText = '';
+  let utterance = null;
+
+  const info = document.getElementById('info');
+  const textDiv = document.getElementById('text');
+  const fileInput = document.getElementById('fileInput');
+
+  // UPLOAD PDF
+  fileInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    info.textContent = 'Loading PDF...';
+    const formData = new FormData();
+    formData.append('pdf', file);
+
+    const res = await fetch('/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (data.error) return info.textContent = 'Error: ' + data.error;
+
+    totalPages = data.pages;
+    currentPage = 0;
+    enableButtons();
+    loadPage(0);
+  });
+
+  async function loadPage(num) {
+    const res = await fetch(`/page/${num}`);
+    const data = await res.json();
+    if (data.error) return info.textContent = data.error;
+
+    currentText = data.text;
+    textDiv.textContent = currentText;
+    info.textContent = `Page ${data.page} of ${data.total}`;
+    currentPage = num;
+    updateBtns();
+  }
+
+  function prevPage() { if (currentPage > 0) loadPage(currentPage - 1); }
+  function nextPage() { if (currentPage < totalPages - 1) loadPage(currentPage + 1); }
+
+  function updateBtns() {
+    document.getElementById('prevBtn').disabled = currentPage === 0;
+    document.getElementById('nextBtn').disabled = currentPage === totalPages - 1;
+  }
+
+  function enableButtons() {
+    document.getElementById('playBtn').disabled = false;
+    document.getElementById('prevBtn').disabled = false;
+    document.getElementById('nextBtn').disabled = false;
+  }
+
+  // WEB SPEECH API - runs in browser
+  function speak() {
+    stopTTS();
+    const speed = parseFloat(document.getElementById('speed').value);
+    utterance = new SpeechSynthesisUtterance(currentText.slice(0, 4000)); // limit
+    utterance.rate = speed;
+    utterance.lang = 'en-US';
+    speechSynthesis.speak(utterance);
+  }
+
+  function stopTTS() {
+    speechSynthesis.cancel();
+  }
+</script>
+</body>
+</html>
