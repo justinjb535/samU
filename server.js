@@ -19,7 +19,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 app.use('/uploads', express.static('uploads'));
-app.use('/api/auth', signupRouter);
+//app.use('/api/auth', signupRouter);
 
 let pdfText = "";  // full text for TTS
 let pdfDoc = null; // pdfjs doc for paging
