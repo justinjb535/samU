@@ -31,12 +31,18 @@
     border-radius: 16px; margin: 20px; background: var(--card);
   }
   #info { text-align: center; opacity: 0.7; margin: 10px 20px; font-size: 0.9rem; }
+  #viewer {
+    margin: 0 20px 120px; display: flex; flex-direction: column; gap: 16px; align-items: center;
+  }
+  #pdfCanvas {
+    max-width: 100%; border: 1px solid var(--border); border-radius: 12px; background: white;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  }
   #text {
     font-size: 16px; line-height: 1.7; white-space: pre-wrap;
-    margin: 0 20px 100px; min-height: 40vh; background: var(--card);
-    padding: 16px; padding-bottom: 120px; /* FIX: extra space for nav */
+    width: 100%; min-height: 20vh; background: var(--card);
+    padding: 16px; padding-bottom: 120px;
     border-radius: 12px; border: 1px solid var(--border);
-    overflow-y: auto;
   }
   button {
     font-size: 16px; padding: 12px 16px; margin: 4px; border: none;
@@ -55,12 +61,12 @@
   #speed { accent-color: var(--accent); }
  .toggle { background: var(--card); border: 1px solid var(--border); border-radius: 50px; padding: 8px 12px; font-size: 1.2rem; }
   @media (min-width: 640px) {
-    #text { margin: 0 40px 100px; padding: 20px; padding-bottom: 120px; font-size: 17px; }
+    #viewer { margin: 0 40px 120px; }
     #dropzone { margin: 20px 40px; }
     h1 { font-size: 1.5rem; }
   }
   @media (min-width: 1024px) {
-    #text { margin: 0 auto 100px; max-width: 900px; padding: 24px; padding-bottom: 120px; font-size: 18px; }
+    #viewer { margin: 0 auto 120px; max-width: 900px; }
     #dropzone { margin: 20px auto; max-width: 900px; }
     header { padding: 16px 5%; }
   }
@@ -76,14 +82,13 @@
     <b>Drop PDF here or</b><br>
     <input type="file" id="fileInput" accept=".pdf" style="margin-top:10px;">
   </div>
-  
-  <div id="viewer" style="margin: 0 20px 100px;">
-  <canvas id="pdfCanvas" style="max-width: 100%; border: 1px solid var(--border); border-radius: 12px; background: white;"></canvas>
-  <div id="text" style="margin-top: 16px;"></div>
-</div>
 
   <div id="info">No PDF loaded</div>
-  <div id="text"></div>
+
+  <div id="viewer">
+    <canvas id="pdfCanvas"></canvas>
+    <div id="text">Upload a PDF to start reading...</div>
+  </div>
 
   <div id="controls">
     <button id="prevBtn" onclick="prevPage()" disabled>⏮️ Prev</button>
@@ -93,7 +98,10 @@
     <label>Speed: <input type="range" id="speed" min="0.5" max="2" step="0.1" value="1"></label>
   </div>
 
-<script>
+<script type="module">
+  import * as pdfjsLib from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs';
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
+
   // THEME TOGGLE
   const toggle = document.getElementById('themeToggle');
   const html = document.documentElement;
@@ -113,11 +121,14 @@
   let totalPages = 0;
   let currentText = '';
   let utterance = null;
+  let pdfDocClient = null;
+  let pdfUrl = null;
+
   const info = document.getElementById('info');
   const textDiv = document.getElementById('text');
   const fileInput = document.getElementById('fileInput');
 
-  // UPLOAD PDF
+  // UPLOAD
   fileInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -130,36 +141,44 @@
     if (data.error) return info.textContent = 'Error: ' + data.error;
 
     totalPages = data.pages;
+    pdfUrl = data.pdfUrl;
     currentPage = 0;
+
+    // Load client-side pdf for canvas rendering
+    pdfDocClient = await pdfjsLib.getDocument(pdfUrl).promise;
+
     enableButtons();
     loadPage(0);
   });
 
-  async function loadPage(num) {
+  window.loadPage = async function(num) {
     const res = await fetch(`/page/${num}`);
     const data = await res.json();
     if (data.error) return info.textContent = data.error;
 
+    // Text for TTS
     currentText = data.text;
     textDiv.textContent = currentText;
     info.textContent = `Page ${data.page} of ${data.total}`;
     currentPage = num;
     updateBtns();
-    
-    // FIX: Auto scroll to bottom when text loads
-    textDiv.scrollTop = textDiv.scrollHeight;
-  }
-  
-  const pageRender = await pdfDocClient.getPage(data.page);
-  const viewport = pageRender.getViewport({ scale: 1.5 });
-  const canvas = document.getElementById('pdfCanvas');
-  const ctx = canvas.getContext('2d');
-  canvas.width = viewport.width;
-  canvas.height = viewport.height;
-  await pageRender.render({ canvasContext: ctx, viewport }).promise;
 
-  function prevPage() { if (currentPage > 0) loadPage(currentPage - 1); }
-  function nextPage() { if (currentPage < totalPages - 1) loadPage(currentPage + 1); }
+    // RENDER DIAGRAM to canvas
+    try {
+      const page = await pdfDocClient.getPage(data.page);
+      const viewport = page.getViewport({ scale: 1.5 });
+      const canvas = document.getElementById('pdfCanvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      await page.render({ canvasContext: ctx, viewport }).promise;
+    } catch(err) {
+      console.error("Canvas render error", err);
+    }
+  }
+
+  window.prevPage = function() { if (currentPage > 0) loadPage(currentPage - 1); }
+  window.nextPage = function() { if (currentPage < totalPages - 1) loadPage(currentPage + 1); }
 
   function updateBtns() {
     document.getElementById('prevBtn').disabled = currentPage === 0;
@@ -172,8 +191,7 @@
     document.getElementById('nextBtn').disabled = false;
   }
 
-  // WEB SPEECH API - runs in browser
-  function speak() {
+  window.speak = function() {
     stopTTS();
     const speed = parseFloat(document.getElementById('speed').value);
     utterance = new SpeechSynthesisUtterance(currentText.slice(0, 4000));
@@ -181,8 +199,8 @@
     utterance.lang = 'en-US';
     speechSynthesis.speak(utterance);
   }
-  
-  function stopTTS() {
+
+  window.stopTTS = function() {
     speechSynthesis.cancel();
   }
 </script>
