@@ -76,6 +76,11 @@
     <b>Drop PDF here or</b><br>
     <input type="file" id="fileInput" accept=".pdf" style="margin-top:10px;">
   </div>
+  
+  <div id="viewer" style="margin: 0 20px 100px;">
+  <canvas id="pdfCanvas" style="max-width: 100%; border: 1px solid var(--border); border-radius: 12px; background: white;"></canvas>
+  <div id="text" style="margin-top: 16px;"></div>
+</div>
 
   <div id="info">No PDF loaded</div>
   <div id="text"></div>
@@ -144,6 +149,14 @@
     // FIX: Auto scroll to bottom when text loads
     textDiv.scrollTop = textDiv.scrollHeight;
   }
+  
+  const pageRender = await pdfDocClient.getPage(data.page);
+  const viewport = pageRender.getViewport({ scale: 1.5 });
+  const canvas = document.getElementById('pdfCanvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  await pageRender.render({ canvasContext: ctx, viewport }).promise;
 
   function prevPage() { if (currentPage > 0) loadPage(currentPage - 1); }
   function nextPage() { if (currentPage < totalPages - 1) loadPage(currentPage + 1); }

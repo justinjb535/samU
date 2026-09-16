@@ -6,8 +6,8 @@ import { fileURLToPath } from 'url';
 import cors from 'cors';
 import pdfParse from 'pdf-parse';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs'; // for page text + count
-//import 'dotenv/config';
-//import { signupRouter } from "alveoli";
+// server.js WITH server-side rendering - Only for Render
+import { createCanvas } from 'canvas';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -77,6 +77,16 @@ app.get('/page/:num', async (req, res) => {
     console.error(err);
     res.status(500).json({ error: "Failed to get page" });
   }
+});
+
+app.get('/render/:num', async (req, res) => {
+  const page = await pdfDoc.getPage(parseInt(req.params.num)+1);
+  const viewport = page.getViewport({ scale: 2.0 });
+  const canvas = createCanvas(viewport.width, viewport.height);
+  const ctx = canvas.getContext('2d');
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  res.set('Content-Type', 'image/png');
+  canvas.createPNGStream().pipe(res);
 });
 
 // 3. TTS endpoint - sends full pdf text
