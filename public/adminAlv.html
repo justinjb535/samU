@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Alveoli - Admin</title>
+<style>
+  body{font-family:system-ui;background:#0a0a0a;color:white;margin:0;min-height:100vh;padding:20px;box-sizing:border-box}
+ .header{max-width:900px;margin:0 auto 20px;display:flex;justify-content:space-between;align-items:center}
+ .header h1{font-size:22px;margin:0}
+ .header span{font-size:12px;color:#888;background:#151515;padding:6px 12px;border-radius:20px;border:1px solid #222}
+ .stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;max-width:900px;margin:0 auto 20px}
+ .stat{background:#151515;padding:16px;border-radius:12px;border:1px solid #222;text-align:center}
+ .stat b{font-size:22px;display:block}
+ .stat label{font-size:11px;color:#aaa;text-transform:uppercase;letter-spacing:.5px}
+ .grid{max-width:900px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+ .pay-card{background:#151515;border:1px solid #222;border-radius:16px;padding:16px;overflow:hidden}
+ .pay-card.pending{border-color:#facc15}
+ .pay-card img{width:100%;border-radius:10px;margin:10px 0;background:#0f0f0f;max-height:300px;object-fit:contain;cursor:pointer}
+ .pay-card.email{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .pay-card.meta{font-size:12px;color:#888;margin:4px 0}
+ .btns{display:flex;gap:8px;margin-top:12px}
+ .btns button{flex:1;padding:10px;border-radius:8px;border:0;font-weight:600;cursor:pointer;font-size:13px}
+ .approve{background:white;color:black}
+ .reject{background:#222;color:#ff5a5a}
+ .approve:disabled,.reject:disabled{opacity:.5}
+  #empty{max-width:900px;margin:60px auto;text-align:center;color:#555}
+  #loginBox{display:flex;justify-content:center;align-items:center;height:100vh}
+</style>
+</head>
+<body>
+
+<div id="adminContent" style="display:none">
+  <div class="header">
+    <h1>Alveoli Admin</h1>
+    <span id="adminEmail">loading...</span>
+  </div>
+  <div class="stats">
+    <div class="stat"><b id="pendingCount">0</b><label>Pending</label></div>
+    <div class="stat"><b id="approvedCount">0</b><label>Approved</label></div>
+    <div class="stat"><b id="totalCount">0</b><label>Total</label></div>
+  </div>
+  <div id="grid" class="grid"></div>
+  <div id="empty" style="display:none">No pending payments 🎉</div>
+</div>
+
+<div id="loginBox">
+  <div style="background:#151515;padding:28px;border-radius:16px;width:320px;text-align:center;border:1px solid #222">
+    <h1 style="margin:0 0 20px;font-size:22px">Admin Login</h1>
+    <p style="color:#888;font-size:13px">Only owner can access</p>
+    <button id="loginBtn" style="width:100%;padding:12px;border-radius:8px;border:0;background:white;color:black;font-weight:600;cursor:pointer;margin-top:12px">Login</button>
+    <p id="error" style="color:#ff5a5a;font-size:13px;margin-top:12px;display:none"></p>
+  </div>
+</div>
+
+<script type="module">
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+const supabase = createClient(
+  "https://pctbcbdqgicazzgwlrhr.supabase.co",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBjdGJjYmRxZ2ljYXp6Z3dscmhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzNzY1MzMsImV4cCI6MjA5Nzk1MjUzM30.NEz5DvbnjdtVuWwpf-6p09wvy_yTy5OETjsFUynoeN4"
+);
+const OWNER_EMAIL = "justinskyie8@gmail.com";
+
+async function checkAdmin(){
+  const { data:{session} } = await supabase.auth.getSession();
+  if(!session) return false;
+  document.getElementById("adminEmail").textContent = session.user.email;
+  if(session.user.email.toLowerCase()!== OWNER_EMAIL.toLowerCase()){
+    document.getElementById("error").textContent = "Not authorized: " + session.user.email;
+    document.getElementById("error").style.display="block";
+    await supabase.auth.signOut();
+    return false;
+  }
+  return true;
+}
+
+async function load(){
+  const isAdmin = await checkAdmin();
+  if(!isAdmin) return;
+  document.getElementById("loginBox").style.display="none";
+  document.getElementById("adminContent").style.display="block";
+
+  const { data, error } = await supabase.from("payments").select("*").order("created_at",{ascending:false});
+  if(error){ alert(error.message); console.error(error); return; }
+
+  const pending = data.filter(p=>p.status==='pending');
+  const approved = data.filter(p=>p.status==='approved');
+  document.getElementById("pendingCount").textContent = pending.length;
+  document.getElementById("approvedCount").textContent = approved.length;
+  document.getElementById("totalCount").textContent = data.length;
+
+  const grid = document.getElementById("grid");
+  const empty = document.getElementById("empty");
+  if(pending.length===0){
+    grid.innerHTML=""; empty.style.display="block";
+  } else {
+    empty.style.display="none";
+    grid.innerHTML = pending.map(p=>`
+      <div class="pay-card pending" data-id="${p.id}">
+        <div class="email">${p.email}</div>
+        <div class="meta">${new Date(p.created_at).toLocaleString()} • P${p.amount||10}</div>
+        <a href="${p.proof_url}" target="_blank"><img src="${p.proof_url}" loading="lazy"/></a>
+        <div class="btns">
+          <button class="approve" data-user="${p.user_id}" data-pay="${p.id}">✅ Approve</button>
+          <button class="reject" data-pay="${p.id}">❌ Reject</button>
+        </div>
+      </div>
+    `).join("");
+
+    // fix: add event listeners properly
+    grid.querySelectorAll(".approve").forEach(btn=>{
+      btn.onclick = async () => {
+        btn.textContent="..."; btn.disabled=true;
+        const userId = btn.dataset.user;
+        const payId = btn.dataset.pay;
+        console.log("Approving", userId, payId);
+        const u1 = await supabase.from("acu_users").update({is_pro:true}).eq("user_id", userId);
+        if(u1.error){ alert("acu_users error: "+u1.error.message); btn.disabled=false; btn.textContent="✅ Approve"; return; }
+        const u2 = await supabase.from("payments").update({status:"approved"}).eq("id", payId);
+        if(u2.error){ alert("payments error: "+u2.error.message); btn.disabled=false; return; }
+        load();
+      }
+    });
+    grid.querySelectorAll(".reject").forEach(btn=>{
+      btn.onclick = async () => {
+        if(!confirm("Reject?")) return;
+        btn.textContent="..."; btn.disabled=true;
+        const payId = btn.dataset.pay;
+        await supabase.from("payments").update({status:"rejected"}).eq("id", payId);
+        load();
+      }
+    });
+  }
+
+  // auto clean 15 days old approved/rejected when admin opens
+  const fifteenDaysAgo = new Date(); fifteenDaysAgo.setDate(fifteenDaysAgo.getDate()-15);
+  const { data: oldOnes } = await supabase.from("payments").select("id, proof_url").in("status",["approved","rejected"]).lt("created_at", fifteenDaysAgo.toISOString());
+  if(oldOnes?.length){
+    for(let p of oldOnes){ const fn = p.proof_url?.split("/payment-proofs/")[1]; if(fn) await supabase.storage.from("payment-proofs").remove([fn]); }
+    await supabase.from("payments").delete().in("id", oldOnes.map(o=>o.id));
+  }
+}
+
+document.getElementById("loginBtn").onclick = ()=> location.href="/login.html";
+const { data:{session} } = await supabase.auth.getSession();
+if(session) load(); else document.getElementById("error").textContent="Please login first";
+</script>
+</body>
+</html>

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>📖 PDF Voice Reader v2.0</title>
+<title>smaU.js study buddy</title>
 <style>
   :root {
     --bg: #ffffff; --text: #1a1a1a; --card: #f7f7f7; --border: #dcdcdc;
@@ -73,36 +73,227 @@
 </style>
 </head>
 <body>
-  <header>
-    <h1>📖 PDF Voice Reader v2.0</h1>
-    <button class="toggle" id="themeToggle">🌙</button>
-  </header>
-
-  <div id="dropzone">
-    <b>Drop PDF here or</b><br>
-    <input type="file" id="fileInput" accept=".pdf" style="margin-top:10px;">
+<div id="paywallBlock" style="display:none;position:fixed;inset:0;z-index:9999;background:#0a0a0a;color:white;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:24px">
+  <div style="background:#151515;padding:28px;border-radius:16px;width:320px;max-width:90%">
+   <h2>Alveoli <span style="color:green;">Cloud</span></h2> <h2>Premium Locked</h2>
+    <p style="color:#aaa;font-size:14px;margin:12px 0">Send P10 to Orange Money: <b style="color:white">76 123 456 (Neo)</b><br>Then upload proof</p>
+    <br><p>or</p><br>
+    <p>Send proof to <a href="https://wa.me/263777708423?text=Hey,i have paid for samU.js premium">Mpho</a></p>
+    <input type="file" id="proof" accept="image/*" style="margin:12px 0;color:white;width:100%" />
+    <button id="submitProof" style="width:100%;padding:12px;border-radius:8px;border:0;background:white;color:black;font-weight:600;cursor:pointer">Upload Screenshot</button>
+    <p id="payStatus" style="font-size:13px;margin-top:12px;color:#4ade80;display:none"></p>
+    <button id="logoutBtn" style="margin-top:16px;background:transparent;color:#888;border:0;text-decoration:underline;cursor:pointer">Logout</button>
   </div>
+</div>
 
-  <div id="info">No PDF loaded</div>
-
-  <div id="viewer">
-    <canvas id="pdfCanvas"></canvas>
-    <div id="text">Upload a PDF to start reading...</div>
-  </div>
-
-  <div id="controls">
-    <button id="prevBtn" onclick="prevPage()" disabled>⏮️ Prev</button>
-    <button id="playBtn" onclick="speak()" disabled>▶️ Play</button>
-    <button id="stopBtn" onclick="stopTTS()">⏹️ Stop</button>
-    <button id="nextBtn" onclick="nextPage()" disabled>⏭️ Next</button>
-    <label>Speed: <input type="range" id="speed" min="0.5" max="2" step="0.1" value="1"></label>
-  </div>
+<header><h1>samU.js</h1><button class="toggle" id="themeToggle">🌙</button></header>
+<div id="dropzone"><b>Drop PDF here or</b><br><input type="file" id="fileInput" accept=".pdf" style="margin-top:10px;"></div>
+<div id="info">No PDF loaded</div>
+<div id="viewer"><canvas id="pdfCanvas"></canvas><div id="text">Upload a PDF to start reading...</div></div>
+<div id="controls">
+  <button id="prevBtn" disabled>⏮ Prev</button>
+  <button id="playBtn" disabled>▶ Play</button>
+  <button id="stopBtn">Stop</button>
+  <button id="sumBtn">Samurise</button>
+  <button id="nextBtn" disabled>⏭ Next</button>
+  <label>Speed: <input type="range" id="speed" min="0.5" max="2" step="0.1" value="1"></label>
+</div>
 
 <script type="module">
-  import * as pdfjsLib from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs';
-  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
+import * as pdfjsLib from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs';
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 
-  // THEME TOGGLE
+const supabase = createClient(
+  "https://pctbcbdqgicazzgwlrhr.supabase.co",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBjdGJjYmRxZ2ljYXp6Z3dscmhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzNzY1MzMsImV4cCI6MjA5Nzk1MjUzM30.NEz5DvbnjdtVuWwpf-6p09wvy_yTy5OETjsFUynoeN4"
+);
+window.supabase = supabase;
+
+let USER_ID = null;
+let IS_PRO = false;
+
+async function initGuard(){
+  const { data:{session} } = await supabase.auth.getSession();
+  if(!session){ location.href="/login.html"; return; }
+  USER_ID = session.user.id;
+
+  let { data:userRow } = await supabase.from("acu_users").select("is_pro").eq("user_id", USER_ID).maybeSingle();
+  if(!userRow){
+    await supabase.from("acu_users").insert({ user_id: USER_ID, email: session.user.email, is_pro:false });
+    userRow = { is_pro:false };
+  }
+  IS_PRO =!!userRow?.is_pro;
+  console.log("PRO:", IS_PRO);
+
+  // show paywall banner but DON'T block reading
+  const block = document.getElementById("paywallBlock");
+  if(!IS_PRO){
+    block.style.display="flex";
+    // close button lets free users read
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent="Continue as Free (limited Samurise) →";
+    closeBtn.style="margin-top:12px;background:#222;color:white;padding:10px;border-radius:8px;border:0;width:100%";
+    closeBtn.onclick = ()=>{ block.style.display="none"; document.body.style.overflow="auto"; };
+    block.querySelector('div').appendChild(closeBtn);
+
+    document.getElementById("submitProof").onclick = async () => {
+      const file = document.getElementById("proof").files[0];
+      if(!file) return alert("Choose screenshot first!");
+      const btn = document.getElementById("submitProof");
+      btn.textContent="Uploading..."; btn.disabled=true;
+      try{
+        const fileName = `${USER_ID}_${Date.now()}.jpg`;
+        const { error } = await supabase.storage.from("payment-proofs").upload(fileName, file);
+        if(error) throw error;
+        const { data } = supabase.storage.from("payment-proofs").getPublicUrl(fileName);
+        await supabase.from("payments").insert({ user_id: USER_ID, email: session.user.email, proof_url: data.publicUrl, amount:10, status:'pending' });
+        document.getElementById("payStatus").textContent="Uploaded! You'll be unlocked shortly";
+        document.getElementById("payStatus").style.display="block"; btn.textContent="Uploaded ✓";
+      }catch(e){ alert(e.message); btn.disabled=false; btn.textContent="Upload Screenshot"; }
+    };
+  } else {
+    block.style.display="none";
+  }
+}
+
+await initGuard();
+
+// APP CODE RUNS FOR BOTH FREE & PRO
+const toggle = document.getElementById('themeToggle');
+const html = document.documentElement;
+const savedTheme = localStorage.getItem('theme') || 'light';
+html.setAttribute('data-theme', savedTheme);
+toggle.textContent = savedTheme === 'dark'? '☀️' : '🌙';
+toggle.addEventListener('click', () => {
+  const current = html.getAttribute('data-theme');
+  const newTheme = current === 'dark'? 'light' : 'dark';
+  html.setAttribute('data-theme', newTheme);
+  localStorage.setItem('theme', newTheme);
+  toggle.textContent = newTheme === 'dark'? '☀️' : '🌙';
+});
+
+let currentPage = 0, totalPages = 0, currentText = '', utterance=null, pdfDocClient=null, pdfUrl=null, showingSummary=false, lastSummary="";
+const info = document.getElementById('info');
+const textDiv = document.getElementById('text');
+const fileInput = document.getElementById('fileInput');
+
+fileInput.addEventListener('change', async (e) => {
+  const file = e.target.files[0]; if (!file) return;
+  info.textContent = 'Loading PDF...';
+  const formData = new FormData(); formData.append('pdf', file);
+  const res = await fetch('/upload', { method: 'POST', body: formData });
+  const data = await res.json();
+  if (data.error) return info.textContent = 'Error: ' + data.error;
+  totalPages = data.pages; pdfUrl = data.pdfUrl; currentPage = 0;
+  pdfDocClient = await pdfjsLib.getDocument(pdfUrl).promise;
+  document.getElementById('playBtn').disabled=false;
+  document.getElementById('prevBtn').disabled=false;
+  document.getElementById('nextBtn').disabled=false;
+  loadPage(0);
+});
+
+// FIXED - now sends user_id so server knows pro/free
+window.loadPage = async function(num) {
+  const res = await fetch(`/page/${num}`, {
+    headers: { 'x-user-id': USER_ID || '' }
+  });
+  const data = await res.json();
+  if (data.error) return info.textContent = data.error;
+  currentText = data.text; lastSummary = data.summary; textDiv.textContent = currentText;
+  info.textContent = `Page ${data.page} of ${data.total} ${data.isPro? '🧠 PRO' : '🔓 FREE'}`;
+  currentPage = num; showingSummary=false;
+  document.getElementById('prevBtn').disabled = currentPage===0;
+  document.getElementById('nextBtn').disabled = currentPage===totalPages-1;
+  try {
+    const page = await pdfDocClient.getPage(data.page);
+    const viewport = page.getViewport({ scale: 1.5 });
+    const canvas = document.getElementById('pdfCanvas'); const ctx = canvas.getContext('2d');
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    await page.render({ canvasContext: ctx, viewport }).promise;
+  } catch(err){ console.error(err); }
+}
+window.toggleSummary = function(){
+  if(!showingSummary){ textDiv.textContent = lastSummary; showingSummary=true; }
+  else{ textDiv.textContent = currentText; showingSummary=false; }
+}
+document.getElementById('prevBtn').onclick = ()=>{ if(currentPage>0) loadPage(currentPage-1); };
+document.getElementById('nextBtn').onclick = ()=>{ if(currentPage<totalPages-1) loadPage(currentPage+1); };
+document.getElementById('playBtn').onclick = ()=>{
+  speechSynthesis.cancel();
+  const speed = parseFloat(document.getElementById('speed').value);
+  utterance = new SpeechSynthesisUtterance(currentText.slice(0,4000));
+  utterance.rate=speed; utterance.lang='en-US'; speechSynthesis.speak(utterance);
+};
+document.getElementById('stopBtn').onclick = ()=> speechSynthesis.cancel();
+document.getElementById('sumBtn').onclick = ()=> toggleSummary();
+</script>
+
+<!--<script type="module">
+import * as pdfjsLib from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs';
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+
+const supabase = createClient(
+  "https://pctbcbdqgicazzgwlrhr.supabase.co",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBjdGJjYmRxZ2ljYXp6Z3dscmhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzNzY1MzMsImV4cCI6MjA5Nzk1MjUzM30.NEz5DvbnjdtVuWwpf-6p09wvy_yTy5OETjsFUynoeN4"
+);
+window.supabase = supabase;
+
+async function initGuard(){
+  const { data:{session} } = await supabase.auth.getSession();
+  if(!session){ location.href="/login.html"; return false; }
+
+  // get pro status
+  let { data:userRow, error } = await supabase.from("acu_users").select("is_pro").eq("user_id", session.user.id).maybeSingle();
+  if(!userRow){
+    // create if missing
+    await supabase.from("acu_users").insert({ user_id: session.user.id, email: session.user.email, is_pro:false });
+    userRow = { is_pro:false };
+  }
+  console.log("PRO:", userRow);
+
+  const { data:pendingList } = await supabase.from("payments").select("status").eq("user_id", session.user.id).eq("status","pending").order("created_at",{ascending:false}).limit(1);
+  const pending = pendingList?.[0];
+
+  if(!userRow?.is_pro){
+    const block = document.getElementById("paywallBlock");
+    block.style.display="flex";
+    document.body.style.overflow="hidden";
+    if(pending){
+      document.getElementById("payStatus").textContent="Proof received! Waiting for approval";
+      document.getElementById("payStatus").style.display="block";
+    }
+    document.getElementById("submitProof").onclick = async () => {
+      const file = document.getElementById("proof").files[0];
+      if(!file) return alert("Choose screenshot first!");
+      const btn = document.getElementById("submitProof");
+      btn.textContent="Uploading..."; btn.disabled=true;
+      try{
+        const fileName = `${session.user.id}_${Date.now()}.jpg`;
+        const { error } = await supabase.storage.from("payment-proofs").upload(fileName, file);
+        if(error) throw error;
+        const { data } = supabase.storage.from("payment-proofs").getPublicUrl(fileName);
+        await supabase.from("payments").insert({ user_id: session.user.id, email: session.user.email, proof_url: data.publicUrl, amount:10, status:'pending' });
+        document.getElementById("payStatus").textContent="Uploaded! You'll be unlocked shortly";
+        document.getElementById("payStatus").style.display="block";
+        btn.textContent="Uploaded ✓";
+      }catch(e){ alert(e.message); btn.disabled=false; btn.textContent="Upload Screenshot"; }
+    };
+    document.getElementById("logoutBtn").onclick = async ()=>{ await supabase.auth.signOut(); location.href="/login.html"; };
+    return false; // STOP - not pro
+  }
+  // pro - hide block
+  document.getElementById("paywallBlock").style.display="none";
+  document.body.style.overflow="auto";
+  return true;
+}
+
+const isPro = await initGuard();
+if(!isPro) {
+  console.log("Blocked - not pro");
+} else {
+  // ===== YOUR APP CODE STARTS HERE - ONLY RUNS IF PRO =====
   const toggle = document.getElementById('themeToggle');
   const html = document.documentElement;
   const savedTheme = localStorage.getItem('theme') || 'light';
@@ -116,93 +307,57 @@
     toggle.textContent = newTheme === 'dark'? '☀️' : '🌙';
   });
 
-  // APP STATE
-  let currentPage = 0;
-  let totalPages = 0;
-  let currentText = '';
-  let utterance = null;
-  let pdfDocClient = null;
-  let pdfUrl = null;
-
+  let currentPage = 0, totalPages = 0, currentText = '', utterance=null, pdfDocClient=null, pdfUrl=null, showingSummary=false, lastSummary="";
   const info = document.getElementById('info');
   const textDiv = document.getElementById('text');
   const fileInput = document.getElementById('fileInput');
 
-  // UPLOAD
   fileInput.addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const file = e.target.files[0]; if (!file) return;
     info.textContent = 'Loading PDF...';
-    const formData = new FormData();
-    formData.append('pdf', file);
-
+    const formData = new FormData(); formData.append('pdf', file);
     const res = await fetch('/upload', { method: 'POST', body: formData });
     const data = await res.json();
     if (data.error) return info.textContent = 'Error: ' + data.error;
-
-    totalPages = data.pages;
-    pdfUrl = data.pdfUrl;
-    currentPage = 0;
-
-    // Load client-side pdf for canvas rendering
+    totalPages = data.pages; pdfUrl = data.pdfUrl; currentPage = 0;
     pdfDocClient = await pdfjsLib.getDocument(pdfUrl).promise;
-
-    enableButtons();
+    document.getElementById('playBtn').disabled=false;
+    document.getElementById('prevBtn').disabled=false;
+    document.getElementById('nextBtn').disabled=false;
     loadPage(0);
   });
 
   window.loadPage = async function(num) {
-    const res = await fetch(`/page/${num}`);
-    const data = await res.json();
+    const res = await fetch(`/page/${num}`); const data = await res.json();
     if (data.error) return info.textContent = data.error;
-
-    // Text for TTS
-    currentText = data.text;
-    textDiv.textContent = currentText;
-    info.textContent = `Page ${data.page} of ${data.total}`;
-    currentPage = num;
-    updateBtns();
-
-    // RENDER DIAGRAM to canvas
+    currentText = data.text; lastSummary = data.summary; textDiv.textContent = currentText;
+    info.textContent = `Page ${data.page} of ${data.total}`; currentPage = num; showingSummary=false;
+    document.getElementById('prevBtn').disabled = currentPage===0;
+    document.getElementById('nextBtn').disabled = currentPage===totalPages-1;
     try {
       const page = await pdfDocClient.getPage(data.page);
       const viewport = page.getViewport({ scale: 1.5 });
-      const canvas = document.getElementById('pdfCanvas');
-      const ctx = canvas.getContext('2d');
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
+      const canvas = document.getElementById('pdfCanvas'); const ctx = canvas.getContext('2d');
+      canvas.width = viewport.width; canvas.height = viewport.height;
       await page.render({ canvasContext: ctx, viewport }).promise;
-    } catch(err) {
-      console.error("Canvas render error", err);
-    }
+    } catch(err){ console.error(err); }
   }
-
-  window.prevPage = function() { if (currentPage > 0) loadPage(currentPage - 1); }
-  window.nextPage = function() { if (currentPage < totalPages - 1) loadPage(currentPage + 1); }
-
-  function updateBtns() {
-    document.getElementById('prevBtn').disabled = currentPage === 0;
-    document.getElementById('nextBtn').disabled = currentPage === totalPages - 1;
+  window.toggleSummary = function(){
+    if(!showingSummary){ textDiv.textContent = "🧠 SAMURISE:\n\n" + lastSummary; showingSummary=true; }
+    else{ textDiv.textContent = currentText; showingSummary=false; }
   }
-
-  function enableButtons() {
-    document.getElementById('playBtn').disabled = false;
-    document.getElementById('prevBtn').disabled = false;
-    document.getElementById('nextBtn').disabled = false;
-  }
-
-  window.speak = function() {
-    stopTTS();
-    const speed = parseFloat(document.getElementById('speed').value);
-    utterance = new SpeechSynthesisUtterance(currentText.slice(0, 4000));
-    utterance.rate = speed;
-    utterance.lang = 'en-US';
-    speechSynthesis.speak(utterance);
-  }
-
-  window.stopTTS = function() {
+  document.getElementById('prevBtn').onclick = ()=>{ if(currentPage>0) loadPage(currentPage-1); };
+  document.getElementById('nextBtn').onclick = ()=>{ if(currentPage<totalPages-1) loadPage(currentPage+1); };
+  document.getElementById('playBtn').onclick = ()=>{
     speechSynthesis.cancel();
-  }
-</script>
+    const speed = parseFloat(document.getElementById('speed').value);
+    utterance = new SpeechSynthesisUtterance(currentText.slice(0,4000));
+    utterance.rate=speed; utterance.lang='en-US'; speechSynthesis.speak(utterance);
+  };
+  document.getElementById('stopBtn').onclick = ()=> speechSynthesis.cancel();
+  document.getElementById('sumBtn').onclick = ()=> toggleSummary();
+  // ===== APP CODE ENDS =====
+}
+</script>-->
 </body>
 </html>
