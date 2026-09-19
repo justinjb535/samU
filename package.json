@@ -4,7 +4,7 @@
   "description": "Upload PDF and read it out loud with TTS",
   "main": "server.js",
   "engines": {
-    "node": "20.x"
+    "node": "22.x"
   },
   "scripts": {
     "start": "node server.js"
@@ -17,7 +17,8 @@
     "express": "^4.22.3",
     "multer": "^1.4.5-lts.1",
     "pdf-parse": "^1.1.1",
-    "pdfjs-dist": "^4.4.168"
+    "pdfjs-dist": "^4.4.168",
+    "ws": "^8.21.3"
   },
   "repository": {
     "type": "git",

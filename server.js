@@ -7,8 +7,10 @@ import cors from 'cors';
 import pdfParse from 'pdf-parse';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { createClient } from '@supabase/supabase-js';
+import ws from 'ws';
 import dotenv from 'dotenv';
 dotenv.config();
+global.WebSocket = ws;
 
 console.log("GROQ KEY LOADED?",!!process.env.GROQ_KEY, process.env.GROQ_KEY?.slice(0,10));
 
