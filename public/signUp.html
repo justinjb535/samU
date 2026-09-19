@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alveoli Cloud - Sign Up</title>
+<style>
+body{background:white;min-height:100vh;margin:0;display:flex;justify-content:center;align-items:center;padding:20px;flex-direction:column;font-family:system-ui}
+.logo{font-size:28px;font-weight:bold;margin-bottom:30px}
+.logo span{color:green}
+.l-wrapper{position:relative;display:inline-block}
+#cloud{position:absolute;top:-1.5em;left:-0.38em;width:3.9em;height:2.98em;filter:drop-shadow(2px 1px 1px #333)}
+#card{background:white;border:1px solid #e2e8f0;border-radius:12px;padding:30px 25px;width:90%;max-width:380px;box-shadow:0 4px 12px rgba(0,0,0,0.1)}
+#card input{padding:12px;margin-top:6px;width:100%;box-sizing:border-box;border:1px solid green;border-radius:8px;font-size:15px}
+#card input:focus{outline:none;border-color:green}
+#card label{font-size:14px;font-weight:600}
+#card button{padding:12px;margin-top:20px;width:100%;background:green;color:white;border:none;border-radius:10px;font-weight:700;cursor:pointer}
+#card button:disabled{opacity:0.6}
+#error{color:#ef4444;font-size:13px;margin-top:10px;display:none;background:#fee2e2;padding:8px;border-radius:6px}
+#success{color:#16a34a;font-size:13px;margin-top:10px;display:none;background:#dcfce7;padding:8px;border-radius:6px}
+a{color:green;text-decoration:none;font-weight:600}
+</style>
+</head>
+<body>
+
+<div class="logo"><span style="color:#000;text-shadow:0 0 2px #fff">Alveoli</span> <span>C<span class='l-wrapper'><img src="/image_1780383490891-removebg-preview (1).png" id="cloud" onerror="this.style.display='none'"/>l</span>oud</span></div>
+
+<div id="card">
+<h2 id="title" style="text-align:center;margin:0 0 20px">Sign Up</h2>
+<label>Email:</label>
+<input type="email" id="email" placeholder="you@example.com" autocomplete="email">
+<br><br>
+<label id="passLabel">Create password:</label>
+<input type="password" id="password" placeholder="8+ chars, letter & number" autocomplete="new-password">
+
+<p id="error"></p>
+<p id="success"></p>
+
+<button id="mainBtn">Get account</button>
+<p style="font-size:13px;text-align:center;margin-top:16px"><span id="switchText">Already have account?</span> <a href="#" id="switchLink">Login</a></p>
+</div>
+
+<!--<script>
+// ====== CHANGE ONLY THIS IF BACKEND IS ON RENDER ======
+const API = "https://alveoli.onrender.com/api/auth"; 
+// Example: const API = "https://alveoli-cloud.onrender.com/api/auth";
+
+const $ = id => document.getElementById(id);
+let isLogin = false;
+
+// STRICT VALIDATION - same as your backend file
+const isEmail = s => {
+  s = s.trim().toLowerCase();
+  return /^\S+@\S+\.\S+$/.test(s) && s.length <= 254 && !s.includes("..");
+};
+const checkPass = p => {
+  if(!p || p.length < 8) return "Password must be 8+ characters";
+  if(p.length > 128) return "Password too long";
+  if(!/[A-Za-z]/.test(p)) return "Password needs a letter";
+  if(!/[0-9]/.test(p)) return "Password needs a number";
+  if(/\s/.test(p)) return "No spaces allowed";
+  return null;
+};
+
+async function handleAuth(){
+  const email = $("email").value.trim().toLowerCase();
+  const password = $("password").value;
+  const errEl = $("error"), okEl = $("success"), btn = $("mainBtn");
+
+  if(!isEmail(email)){ errEl.textContent="Enter valid email e.g. name@domain.com"; errEl.style.display="block"; return; }
+  const pe = checkPass(password);
+  if(pe){ errEl.textContent=pe; errEl.style.display="block"; return; }
+  errEl.style.display="none"; okEl.style.display="none";
+
+  btn.disabled=true; btn.textContent=isLogin?"Logging in...":"Creating...";
+
+  try{
+    const url = isLogin ? `${API}/login` : `${API}/signup`;
+   /* const res = await fetch(url, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await res.json();*/
+    const res = await fetch(url, {
+  method:"POST",
+  headers:{ "Content-Type":"application/json" },
+  body: JSON.stringify({ email, password })
+});
+
+// If backend sent HTML instead of JSON, show it
+const text = await res.text();
+let data;
+try {
+  data = JSON.parse(text);
+} catch {
+  throw new Error(`Backend returned HTML not JSON. Status ${res.status}. Did you push index.js? Preview: ${text.slice(0,100)}`);
+}
+    if(!res.ok) throw new Error(data.error || "Failed");
+
+    if(isLogin){
+      localStorage.setItem("alveoli_session", JSON.stringify(data.session));
+      okEl.textContent="Logged in! Redirecting..."; okEl.style.display="block";
+      setTimeout(()=> location.href="/dashboard.html", 800);
+    } else {
+      okEl.textContent="Account created! Now login."; okEl.style.display="block";
+      // switch to login mode
+      isLogin=true; updateUI();
+    }
+  }catch(e){
+    errEl.textContent=e.message; errEl.style.display="block";
+  }finally{
+    btn.disabled=false; btn.textContent=isLogin?"Login":"Get account";
+  }
+}
+
+function updateUI(){
+  $("title").textContent=isLogin?"Login":"Sign Up";
+  $("mainBtn").textContent=isLogin?"Login":"Get account";
+  $("passLabel").textContent=isLogin?"Password:":"Create password:";
+  $("switchText").textContent=isLogin?"No account?":"Already have account?";
+  $("switchLink").textContent=isLogin?"Sign up":"Login";
+  $("error").style.display="none"; $("success").style.display="none";
+}
+
+$("mainBtn").addEventListener("click", handleAuth);
+["email","password"].forEach(id=>{
+  $(id).addEventListener("keydown", e=>{ if(e.key==="Enter") handleAuth(); });
+  $(id).addEventListener("input", ()=> $("error").style.display="none");
+});
+$("switchLink").addEventListener("click", e=>{
+  e.preventDefault(); isLogin=!isLogin; updateUI();
+});
+</script>
+<script type="module">
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+
+// PUT YOUR KEYS HERE
+const SUPABASE_URL = "https://YOUR_PROJECT.supabase.co";
+const SUPABASE_ANON_KEY = "YOUR_ANON_KEY_HERE";
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const $ = id => document.getElementById(id);
+let isLogin = false;
+
+const isEmail = s => /^\S+@\S+\.\S+$/.test(s.trim().toLowerCase()) && s.length <= 254 && !s.includes("..");
+const checkPass = p => {
+  if(!p || p.length < 8) return "Password must be 8+ characters";
+  if(p.length > 128) return "Password too long";
+  if(!/[A-Za-z]/.test(p)) return "Password needs a letter";
+  if(!/[0-9]/.test(p)) return "Password needs a number";
+  if(/\s/.test(p)) return "No spaces allowed";
+  return null;
+};
+
+async function handleAuth(){
+  const email = $("email").value.trim().toLowerCase();
+  const password = $("password").value;
+  const errEl = $("error"), okEl = $("success"), btn = $("mainBtn");
+
+  if(!isEmail(email)){ errEl.textContent="Enter valid email"; errEl.style.display="block"; return; }
+  const pe = checkPass(password);
+  if(pe){ errEl.textContent=pe; errEl.style.display="block"; return; }
+
+  errEl.style.display="none"; okEl.style.display="none";
+  btn.disabled=true; btn.textContent=isLogin?"Logging in...":"Creating...";
+
+  try{
+    if(isLogin){
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if(error) throw error;
+      okEl.textContent="Logged in! Redirecting..."; okEl.style.display="block";
+      setTimeout(()=> location.href="/dashboard.html", 800);
+    } else {
+      // 1. Create auth user
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      if(error) throw error;
+      
+      // 2. Insert into ACU table
+      const user_id = data.user?.id;
+      if(user_id){
+        await supabase.from("acu_users").insert({ user_id, email });
+      }
+
+      okEl.textContent="Account created! Now login."; okEl.style.display="block";
+      isLogin=true; updateUI();
+    }
+  }catch(e){
+    errEl.textContent=e.message; errEl.style.display="block";
+  }finally{
+    btn.disabled=false; btn.textContent=isLogin?"Login":"Get account";
+  }
+}
+
+function updateUI(){
+  $("title").textContent=isLogin?"Login":"Sign Up";
+  $("mainBtn").textContent=isLogin?"Login":"Get account";
+  $("passLabel").textContent=isLogin?"Password:":"Create password:";
+}
+window.handleAuth = handleAuth;
+$("mainBtn").addEventListener("click", handleAuth);
+$("switchLink").addEventListener("click", e=>{
+  e.preventDefault(); isLogin=!isLogin; updateUI();
+});
+</script>-->
+
+<script type="module">
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+
+const SUPABASE_URL = "https://pctbcbdqgicazzgwlrhr.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBjdGJjYmRxZ2ljYXp6Z3dscmhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzNzY1MzMsImV4cCI6MjA5Nzk1MjUzM30.NEz5DvbnjdtVuWwpf-6p09wvy_yTy5OETjsFUynoeN4";
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const $ = id => document.getElementById(id);
+let isLogin = false;
+
+window.handleAuth = async () => {
+  const email = $("email").value.trim().toLowerCase();
+  const password = $("password").value;
+  const errEl = $("error");
+  try{
+    if(isLogin){
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if(error) throw error;
+      location.href="/index.html";
+    } else {
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      if(error) throw error;
+      // insert into existing acu_users
+      const { error: dbErr } = await supabase.from("acu_users").insert({ user_id: data.user.id, email });
+      if(dbErr) console.warn("acu_users insert failed (check RLS):", dbErr);
+      alert("Account created! Login now");
+      isLogin = true;
+    }
+  }catch(e){
+    errEl.textContent = e.message;
+    errEl.style.display = "block";
+    console.error(e);
+  }
+};
+
+$("mainBtn").addEventListener("click", () => handleAuth());
+
+let sT = document.getElementById("switchLink")
+
+sT.onclick =()=>{
+alert("redirecting you to login page");
+window.location.href="login.html";
+};
+</script>
+</body>
+</html>

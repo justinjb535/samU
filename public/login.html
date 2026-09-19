@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Alveoli - ACU</title>
+<style>
+  body{font-family:system-ui;background:#0a0a0a;color:white;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}
+  .card{background:#151515;padding:28px;border-radius:16px;width:320px;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+  h1{margin:0 0 20px;font-size:22px}
+  label{font-size:12px;color:#aaa}
+  input{width:100%;padding:12px;margin:6px 0 14px;border-radius:8px;border:1px solid #2a2a2a;background:#0f0f0f;color:white;box-sizing:border-box}
+  button{width:100%;padding:12px;border-radius:8px;border:0;background:white;color:black;font-weight:600;cursor:pointer}
+  button:disabled{opacity:.5}
+  #error{color:#ff5a5a;font-size:13px;margin-top:12px;display:none}
+  #success{color:#4ade80;font-size:13px;margin-top:12px;display:none}
+  .switch{margin-top:16px;font-size:13px;text-align:center;color:#888}
+  .switch a{color:white;cursor:pointer;text-decoration:underline}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1 id="title">Sign Up</h1>
+  <label>Email:</label>
+  <input id="email" type="email" placeholder="Email" />
+<input id="password" type="password" placeholder="Password" />
+<button id="loginBtn">Login</button>
+<p id="error" style="color:red;display:none"></p>
+
+<script type="module">
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+
+const supabase = createClient(
+  "https://pctbcbdqgicazzgwlrhr.supabase.co",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBjdGJjYmRxZ2ljYXp6Z3dscmhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzNzY1MzMsImV4cCI6MjA5Nzk1MjUzM30.NEz5DvbnjdtVuWwpf-6p09wvy_yTy5OETjsFUynoeN4"
+);
+
+const $ = id => document.getElementById(id);
+
+$("loginBtn").onclick = async () => {
+  const email = $("email").value.trim().toLowerCase();
+  const password = $("password").value;
+  const err = $("error");
+  err.style.display="none";
+
+  try{
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if(error) throw error;
+    
+    // save session if you want
+    localStorage.setItem("alveoli_session", JSON.stringify(data.session));
+    
+    location.href = "/index.html"; // REDIRECT
+  }catch(e){
+    err.textContent = e.message;
+    err.style.display = "block";
+  }
+};
+</script>
+
+<!--  <input id="email" type="email" placeholder="name@domain.com" />
+  <label id="passLabel">Create password:</label>
+  <input id="password" type="password" placeholder="8+ chars, letter + number" />
+  <button id="mainBtn">Get account</button>
+  <div id="error"></div>
+  <div id="success"></div>
+  <div class="switch"><span id="switchText">Already have account?</span> <a id="switchLink">Login</a></div>
+</div>
+
+<script type="module">
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+
+const supabase = createClient(
+  "https://pctbcbdqgicazzgwlrhr.supabase.co",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBjdGJjYmRxZ2ljYXp6Z3dscmhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzNzY1MzMsImV4cCI6MjA5Nzk1MjUzM30.NEz5DvbnjdtVuWwpf-6p09wvy_yTy5OETjsFUynoeN4"
+);
+
+const $ = id => document.getElementById(id);
+let isLogin = false;
+
+const isEmail = s => /^\S+@\S+\.\S+$/.test(s.trim().toLowerCase());
+const checkPass = p => {
+  if(!p || p.length < 8) return "Password must be 8+ characters";
+  if(!/[A-Za-z]/.test(p)) return "Password needs a letter";
+  if(!/[0-9]/.test(p)) return "Password needs a number";
+  if(/\s/.test(p)) return "No spaces allowed";
+  return null;
+};
+
+function updateUI(){
+  $("title").textContent = isLogin ? "Login" : "Sign Up";
+  $("mainBtn").textContent = isLogin ? "Login" : "Get account";
+  $("passLabel").textContent = isLogin ? "Password:" : "Create password:";
+  $("switchText").textContent = isLogin ? "No account?" : "Already have account?";
+  $("switchLink").textContent = isLogin ? "Sign up" : "Login";
+  $("error").style.display="none"; $("success").style.display="none";
+}
+
+async function handleAuth(){
+  const email = $("email").value.trim().toLowerCase();
+  const password = $("password").value;
+  const errEl = $("error"), okEl = $("success"), btn = $("mainBtn");
+
+  if(!isEmail(email)){ errEl.textContent="Enter valid email"; errEl.style.display="block"; return; }
+  const pe = checkPass(password);
+  if(pe){ errEl.textContent=pe; errEl.style.display="block"; return; }
+
+  errEl.style.display="none"; okEl.style.display="none";
+  btn.disabled=true; btn.textContent = isLogin ? "Logging in..." : "Creating...";
+
+  try{
+    if(isLogin){
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if(error) throw error;
+      okEl.textContent="Logged in! Redirecting..."; okEl.style.display="block";
+      setTimeout(()=> location.href="/index.html", 600);
+    } else {
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      if(error) throw error;
+      
+      // insert into your existing acu_users
+      if(data.user){
+        await supabase.from("acu_users").insert({ user_id: data.user.id, email });
+      }
+
+      // if email confirmation OFF, auto redirect
+      if(data.session){
+        okEl.textContent="Account created! Redirecting..."; okEl.style.display="block";
+        setTimeout(()=> location.href="/dashboard.html", 600);
+      } else {
+        okEl.textContent="Account created! Now login."; okEl.style.display="block";
+        isLogin=true; updateUI();
+      }
+    }
+  }catch(e){
+    errEl.textContent=e.message; errEl.style.display="block";
+  }finally{
+    btn.disabled=false; btn.textContent = isLogin ? "Login" : "Get account";
+  }
+}
+
+$("mainBtn").addEventListener("click", handleAuth);
+$("switchLink").addEventListener("click", e=>{
+  e.preventDefault(); isLogin=!isLogin; updateUI();
+});
+$("email").addEventListener("keydown", e=>{ if(e.key==="Enter") handleAuth(); });
+$("password").addEventListener("keydown", e=>{ if(e.key==="Enter") handleAuth(); });
+</script>-->
+</body>
+</html>
